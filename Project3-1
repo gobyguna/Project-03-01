@@ -1,0 +1,82 @@
+#!/usr/bin/python3
+
+# Project#03- Part01
+# You are expected to amend the LED and Button numbers to match your circuit. 
+
+from signal import signal, SIGTERM, SIGHUP, pause
+from gpiozero import LED, Button
+from threading import Thread
+from time import sleep
+from random import randrange
+from rpi_lcd import LCD
+
+patterns = [
+    [1, 0, 0, 0, 0, 0],
+    [1, 1, 0, 0, 0, 0],
+    [1, 1, 1, 0, 0, 0],
+    [1, 1, 1, 1, 0, 0],
+    [1, 1, 1, 1, 1, 0],
+    [1, 0, 1, 0, 1, 0]
+]
+
+leds = [LED(13), LED(19), LED(26), LED(20), LED(16), LED(12)]
+button = Button(21)
+lcd = LCD()
+is_running = True
+delay = 0.1
+index = 0
+led_in = 5
+led_out = 0
+
+def safe_exit(signum, frame):
+    exit(1)
+
+def show_pattern():
+    while is_running:
+        for id in range(6):
+            leds[id].value = patterns[index][id]
+        token = patterns[index].pop(led_out)
+        patterns[index].insert(led_in, token)
+        sleep(delay)
+
+def change_direction():
+    global led_in, led_out, index
+    led_in, led_out = led_out, led_in
+    while True:
+        new_index = randrange(0, len(patterns))
+        if new_index != index:
+            index = new_index
+            lcd_display()
+            break
+
+def lcd_init():
+    lcd.text(f"Pattern: {index+1}/6.", 1)
+    lcd.cursor_pos = (1, 0)
+    lcd.text(">>" if led_in == 5 else "<<", 2)
+
+def lcd_display():
+    lcd.clear()
+    lcd_init()
+
+try:
+    signal(SIGTERM, safe_exit)
+    signal(SIGHUP, safe_exit)
+
+    lcd_init()
+    button.when_pressed = change_direction
+    index = randrange(0, len(patterns))
+
+    worker = Thread(target=show_pattern, daemon=True)
+    worker.start()
+
+    pause()
+
+except KeyboardInterrupt:
+    pass
+
+finally:
+    is_running = False
+    worker.join()
+    lcd.clear()
+    for id in range(6):
+        leds[id].close()
